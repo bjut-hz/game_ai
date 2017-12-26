@@ -14,3 +14,5 @@ context:Handle()
 context:SetState(ct2)
 context:SetHour(1000)
 context:Handle()
+
+print(Context:GetHour())
