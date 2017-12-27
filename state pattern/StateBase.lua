@@ -9,7 +9,7 @@ function State:new(v)
 	return v
 end
 
-function State:Handle(context)
+function State:handle(context)
 	print("in State base.")
 end
 

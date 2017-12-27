@@ -11,21 +11,21 @@ function Context:new(v)
 	return v
 end
 
-function Context:Handle()
-	self._state:Handle(self)
+function Context:handle()
+	self._state:handle(self)
 end
 
-function Context:SetState(state)
+function Context:setState(state)
 	-- use __newindex meta method and create a _state variable
 	self._state = state
 end
 
-function Context:SetHour(hour)
-	-- use __newindex meta method and create a _state variable
+function Context:setHour(hour)
+	-- use __newindex meta method and create a _hour variable
 	self._hour = hour
 end
 
-function Context:GetHour()
+function Context:getHour()
 	return self._hour
 end
 
