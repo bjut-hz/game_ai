@@ -1,160 +1,102 @@
---
---  BehaviourTree
---
---  Created by Tilmann Hars on 2012-07-12.
---  Copyright (c) 2012 Headchant. All rights reserved.
---
+require("class")
 
-local Class = require 'class'
+local Status = {READY = 0, RUNNING = 1, FAILED = 2, SUCCESS = 3}
 
-local READY = "ready"
-local RUNNING = "running"
-local FAILED = "failed"
 
-Action = Class({init = function(self, task)
+Action = class()
+function Action:ctor(task)
     self.task = task
-    self.completed = false
-end})
-
-function Action:update(creatureAI)
-    if self.completed then return READY end
-    self.completed = self.task(creatureAI)
-    return RUNNING
+    self.status = Status.READY
 end
 
-Condition = Class({init = function(self, condition)
-    self.condition = condition
-end})
-
-function Condition:update(creatureAI)
-    return self.condition(creatureAI) and READY or FAILED
+function Action.task(ctx)
+    print("default task, return success.")
+    return Status.SUCCESS
 end
 
-Selector = Class({init = function(self, children)
-    self.children = children
-end})
-
-function Selector:update(creatureAI)
-    for i,v in ipairs(self.children) do
-        local status = v:update(creatureAI)
-        if status == RUNNING then
-            return RUNNING
-        elseif status == READY then
-            if i == #self.children then
-                self:resetChildren()
-                return READY
-            end
+function Action:update(ctx)
+    if self.status == Status.READY or self.status == Status.RUNNING then
+        if self.task then
+            self.status = self.task(ctx)
         end
     end
-    return READY
+    return self.status
 end
 
-function Selector:resetChildren()
-    for ii,vv in ipairs(self.children) do
-        vv.completed = false
-    end
-end
-
-Sequence = Class({init = function(self, children)
+Selector = class()
+function Selector:ctor(children)
     self.children = children
-    self.last = nil
-    self.completed = false
-end})
+    self.status = Status.READY
+end
 
-function Sequence:update(creatureAI)
-    if self.completed then return READY end
-
-    local last = 1
-
-    if self.last and self.last ~= #self.children then
-        last = self.last + 1
-    end
-
-    for i = last, #self.children do
-        local v = self.children[i]:update(creatureAI)
-        if v == RUNNING then
-            self.last = i
-            return RUNNING
-        elseif v == FAILED then
-            self.last = nil
-            self:resetChildren()
-            return FAILED
-        elseif v == READY then
-            if i == #self.children then
-                self.last = nil
-                self:resetChildren()
-                self.completed = true
-                return READY
+function Selector:update(ctx)
+    if self.status == Status.READY or self.status == Status.RUNNING then
+        for _, v in ipairs(self.children) do
+            local res = v:update(ctx)
+            -- success or running
+            if Status.FAILED ~= res then
+                self.status = res
+                return res
             end
         end
-    end
-
-end
-
-function Sequence:resetChildren()
-    for ii,vv in ipairs(self.children) do
-        vv.completed = false
+        self.status = Status.FAILED
     end
 end
 
----------------------------------------------------------------------------
--- Example
+Sequence = class()
+function Sequence:ctor(children)
+    self.children = children
+    self.status = Status.READY
+end
 
-local TRUE = function() return true end
-local FALSE = function() return false end
+function Sequence:update(ctx)
+    if self.status == Status.READY or self.status == Status.RUNNING then
+        for _,v in ipairs(self.children) do
+            local res = v:update(ctx)
+            self.status = res
+            if res == Status.FAILED then
+                return res
+            end
+        end
 
-local isThiefNearTreasure = Condition(FALSE)
-local stillStrongEnoughToCarryTreasure = Condition(TRUE)
-local updated = false
+        if self.status ~= Status.RUNNING then
+            self.status = Status.SUCCESS
+        end
+    end
+end
 
-
-local makeThiefFlee = Action(function() print("making the thief flee") return false end)
-local chooseCastle = Action(function() print("choosing Castle") return true end)
-local flyToCastle = Action(function() print("fly to Castle") return true end)
-local fightAndEatGuards = Action(function() print("fighting and eating guards") return true end)
-local takeGold = Action(function() print("picking up gold") return true end)
-local flyHome = Action(function() print("flying home") return true end)
-local putTreasureAway = Action(function() print("putting treasure away") return true end)
-local postPicturesOfTreasureOnFacebook = Action(function()
-    print("posting pics on facebook")
-    return true
+-- test
+local act1 = Action.new(function(ctx)
+    print("act1.task: ")
+    return Status.SUCCESS
 end)
 
--- testing subtree
-local packStuffAndGoHome = Selector{
-    Sequence{
-        stillStrongEnoughToCarryTreasure,
-        takeGold,
-
-    },
-    Sequence{
-        flyHome,
-        putTreasureAway,
-    }
-}
-
-local simpleBehaviour = Selector{
-                            Sequence{
-                                isThiefNearTreasure,
-                                makeThiefFlee,
-                            },
-                            Sequence{
-                                chooseCastle,
-                                flyToCastle,
-                                fightAndEatGuards,
-                                packStuffAndGoHome
-
-                            },
-                            Sequence{
-                                postPicturesOfTreasureOnFacebook
-                            }
-                        }
+local act2 = Action.new(function(ctx)
+    print("act2.task: ")
+    return Status.SUCCESS
+end)
 
 
-function exampleLoop()
-    for i=1,10 do
-        simpleBehaviour:update()
+local act3 = Action.new(function(ctx)
+    print("act3.task: ")
+    return Status.FAILED
+end)
+
+math.randomseed(os.time()) 
+local act4 = Action.new(function(ctx)
+    print("act4.task: ")
+    local num = math.random(10)
+    if num < 5 then
+        return Status.SUCCESS
     end
-end
+    return Status.RUNNING
+end)
 
-exampleLoop()
+local bt = Sequence.new({
+    Selector.new({act1, act2, act3}),
+    act4,
+})
+
+for i=1, 100 do
+    bt:update()
+end
